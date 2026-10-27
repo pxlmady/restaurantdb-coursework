@@ -1,0 +1,21 @@
+# Залежності та збірки
+node_modules/
+dist/
+coverage/
+
+# Локальні змінні середовища (паролі)
+.env
+server/.env
+
+# Бекапи бази та звіти перевірок лишаються локально
+database/backup/*.bak
+database/reports/*
+!database/reports/.gitkeep
+
+# Налаштування IDE
+.idea/
+.vscode/
+
+# Журнали
+*.log
+npm-debug.log*

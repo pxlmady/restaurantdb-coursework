@@ -1,0 +1,11 @@
+# Залежності, збірки та згенеровані файли
+node_modules/
+dist/
+coverage/
+package-lock.json
+
+# Локальні дані, які Prettier не форматує
+database/backup/
+database/reports/
+docs/
+.idea/

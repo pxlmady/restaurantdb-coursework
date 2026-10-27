@@ -1,0 +1,13 @@
+// Схема бази даних RestaurantDB (Prisma ORM, Microsoft SQL Server).
+// База вже існує (відновлена з бекапу), тому моделі не пишуться вручну:
+// на етапі 4 їх буде отримано з бази командою `prisma db pull`.
+// Не запускайте `prisma migrate dev` і `prisma db push`: вони можуть змінити або очистити базу.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}

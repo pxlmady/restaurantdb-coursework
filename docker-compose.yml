@@ -1,0 +1,58 @@
+# Локальна база даних SQL Server для курсової RestaurantDB.
+# Запуск: у PyCharm кнопка ▶ біля "services:" або в терміналі `docker compose up -d`.
+# Значення змінних беруться з файлу .env у корені проєкту (див. .env.example).
+name: restaurantdb-coursework
+
+services:
+  db:
+    # Бекап RestaurantDB зроблено в SQL Server 2025 (17.x), тому образ саме 2025:
+    # у старшу версію (2022) такий бекап не відновлюється.
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: restaurantdb-mssql
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Задайте MSSQL_SA_PASSWORD у .env}
+      # Збірання сервера як у локальному SQLEXPRESS; діє лише під час першого створення тому
+      MSSQL_COLLATION: Cyrillic_General_CI_AS
+    ports:
+      - '127.0.0.1:${MSSQL_PORT:-1433}:1433'
+    volumes:
+      - restaurantdb-mssql-data:/var/opt/mssql
+      - ./database/backup:/backup:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          '/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1" -b -o /dev/null',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Одноразовий сервіс: коли БД готова, відновлює RestaurantDB з бекапу (лише якщо бази ще немає)
+  # і записує знімок структури в database/reports/check_structure.txt. Після цього зупиняється.
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: restaurantdb-mssql-init
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?Задайте MSSQL_SA_PASSWORD у .env}
+    volumes:
+      - ./database/scripts:/scripts:ro
+      - ./database/reports:/reports
+    entrypoint: ['/bin/bash', '-c']
+    command:
+      - >-
+        /opt/mssql-tools18/bin/sqlcmd -C -S db -U sa -b -f 65001 -i /scripts/restore.sql &&
+        /opt/mssql-tools18/bin/sqlcmd -C -S db -U sa -b -f 65001 -W -s "|"
+        -i /scripts/check_structure.sql -o /reports/check_structure.txt &&
+        echo "Знімок структури записано в database/reports/check_structure.txt"
+    restart: 'no'
+
+volumes:
+  restaurantdb-mssql-data:

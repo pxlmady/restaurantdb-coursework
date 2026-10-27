@@ -1,0 +1,7 @@
+# Кінці рядків LF у всіх текстових файлах (як очікує Prettier), незалежно від
+# налаштування core.autocrlf у Git для Windows
+* text=auto eol=lf
+
+# Двійкові файли не змінюються
+*.bak binary
+*.png binary
