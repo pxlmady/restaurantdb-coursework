@@ -8,6 +8,8 @@
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "db:check": "npm --prefix server run db:check",
+    "db:sample": "npm --prefix server run db:sample",
+    "db:pull": "npm --prefix server run db:pull",
     "lint": "npm --prefix server run lint && npm --prefix client run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

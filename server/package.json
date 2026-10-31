@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "db:check": "node scripts/check-db.js",
+    "db:sample": "node scripts/read-sample.js",
+    "db:pull": "prisma db pull && node scripts/fix-schema.js && prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:studio": "prisma studio",

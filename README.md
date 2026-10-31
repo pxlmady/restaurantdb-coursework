@@ -6,8 +6,8 @@
 Стек: React + Vite + Material UI (клієнт), Node.js + Express (сервер), Microsoft SQL Server 2025 у
 Docker + Prisma ORM (дані). Запуск лише локальний.
 
-Поточний стан: **етап 3 — каркас застосунку**. Клієнт показує стан сервера й бази даних; моделі Prisma,
-CRUD і запити додаються на наступних етапах.
+Поточний стан: **етап 4 — схема Prisma**. Моделі Prisma отримано з наявної бази; клієнт поки показує
+лише стан сервера й бази даних. CRUD і запити додаються на наступних етапах.
 
 ## Структура
 
@@ -15,7 +15,7 @@ CRUD і запити додаються на наступних етапах.
 client/                клієнтська частина (React, Vite, MUI)
 server/                серверна частина (Express, Prisma)
   prisma/              схема бази даних Prisma
-  scripts/             службові скрипти (перевірка підключення до БД)
+  scripts/             службові скрипти (перевірка БД, тестове читання, уточнення схеми)
   src/                 код API
 database/
   backup/              бекап RestaurantDB.bak (у git не потрапляє)
@@ -59,8 +59,10 @@ server/.env.example    змінні серверної частини (DATABASE_
    виконає `prisma generate`.
 3. Перевірте підключення сервера до бази: `npm run db:check`. Очікувано: назва бази `RestaurantDB`,
    версія SQL Server і 7 таблиць.
-4. Запустіть сервер: `npm run dev:server` → http://localhost:3000/api/health
-5. В іншій вкладці терміналу запустіть клієнт: `npm run dev:client` → http://localhost:5173
+4. Перевірте читання через моделі Prisma: `npm run db:sample`. Очікувано: кількість записів у кожній
+   таблиці і перше замовлення з позиціями.
+5. Запустіть сервер: `npm run dev:server` → http://localhost:3000/api/health
+6. В іншій вкладці терміналу запустіть клієнт: `npm run dev:client` → http://localhost:5173
 
 ## Перевірки працездатності
 
@@ -70,9 +72,35 @@ server/.env.example    змінні серверної частини (DATABASE_
 | `GET /api/health/db`  | `{"status":"ok","database":"connected","name":"RestaurantDB"}` або 503 |
 | http://localhost:5173 | сторінка зі станом клієнта, сервера та бази даних                      |
 
-Схема Prisma поки не містить моделей: їх буде отримано з наявної бази командою `prisma db pull`.
-Команди `prisma migrate dev` і `prisma db push` для цієї бази не використовуються, бо можуть змінити
-або очистити її.
+## Схема Prisma
+
+`server/prisma/schema.prisma` отримано з бази (`prisma db pull`), а не написано вручну.
+
+- 7 моделей відповідають таблицям, назви полів збігаються з назвами стовпців (`id_visitor`, `full_name`
+  тощо), тому ті самі назви використовуються в SQL-запитах і в коді.
+- Назви зв'язків задано вручну: `Visitor.reservations`, `Reservation.visitor`, `Reservation.order`,
+  `Order.reservation`, `Order.waiter`, `Order.table`, `Order.order_details`, `OrderDetail.dish` тощо.
+- Обмеження CHECK Prisma не відображає. Допустимі значення записано в коментарях `///` біля полів.
+  Порушення CHECK Prisma повертає з кодом P2003 і назвою обмеження (наприклад, `CHK_Order_Status`).
+- Службова таблиця SSMS `sysdiagrams` позначена `@@ignore`: у клієнті Prisma її немає.
+- Значення за замовчуванням для `reservation_status` виправлено на `"Активне"`: `db pull` читає його як
+  `"N'Активне'"`, і таке значення порушує CHECK під час вставки.
+
+## Зміни структури бази
+
+Структуру змінюємо SQL-скриптами, а схему Prisma після цього оновлюємо з бази:
+
+1. Перед зміною зробіть бекап бази (скрипт для цього з'явиться на етапі 5).
+2. Напишіть SQL-скрипт у `database/scripts/` і виконайте його в PyCharm (Database Tools) або через
+   `sqlcmd` у контейнері.
+3. Зупиніть сервер (`npm run dev:server`), щоб Windows не блокувала файли Prisma.
+4. Виконайте `npm run db:pull`. Він запускає `prisma db pull`, скрипт `server/scripts/fix-schema.js`,
+   який повертає виправлення, що їх `db pull` скидає, і `prisma generate`.
+5. Перегляньте зміни `schema.prisma` у PyCharm (Git → Commit) і закомітьте скрипт разом зі схемою.
+
+Повторний `db pull` зберігає назви зв'язків, коментарі `///` і `@@ignore`. Не запускайте
+`npx prisma db pull` окремо: без `fix-schema.js` схема знову отримає хибне значення за замовчуванням.
+`prisma migrate dev` і `prisma db push` не використовуються взагалі, бо можуть змінити або очистити базу.
 
 ## Підключення до бази з IDE
 
@@ -111,6 +139,7 @@ server/.env.example    змінні серверної частини (DATABASE_
 | `db-init`: не вдалося записати звіт                  | виконайте `database/scripts/check_structure.sql` у PyCharm або SSMS                                                        |
 | `db:check`: `Authentication failed`                  | пароль у `server/.env` не збігається з `MSSQL_SA_PASSWORD` у кореневому `.env`                                             |
 | `db:check`: `Can't reach database server`            | контейнер `restaurantdb-mssql` не запущений або порт у `DATABASE_URL` інший                                                |
+| `EPERM` під час `prisma generate` або `db:pull`      | зупиніть сервер (`dev:server`) і повторіть команду                                                                         |
 | `EADDRINUSE` для 3000 або 5173                       | порт зайнятий іншою програмою; для сервера задайте інший `PORT` у `server/.env` і той самий порт у `client/vite.config.js` |
 
 ## Якість коду

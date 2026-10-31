@@ -1,6 +1,6 @@
 // Схема бази даних RestaurantDB (Prisma ORM, Microsoft SQL Server).
-// База вже існує (відновлена з бекапу), тому моделі не пишуться вручну:
-// на етапі 4 їх буде отримано з бази командою `prisma db pull`.
+// Моделі отримано з наявної бази командою `npm run db:pull` (prisma db pull + scripts/fix-schema.js).
+// Назви моделей і полів збігаються з назвами таблиць і стовпців; назви зв'язків задано вручну.
 // Не запускайте `prisma migrate dev` і `prisma db push`: вони можуть змінити або очистити базу.
 
 generator client {
@@ -10,4 +10,87 @@ generator client {
 datasource db {
   provider = "sqlserver"
   url      = env("DATABASE_URL")
+}
+
+model Dish {
+  id_dish       Int           @id(map: "PK_Dish") @default(autoincrement())
+  title         String        @unique(map: "UQ_Dish_Title") @db.NVarChar(100)
+  /// CHECK CHK_Dish_Price: price >= 0
+  price         Decimal       @db.Decimal(10, 2)
+  /// CHECK CHK_Dish_Weight: weight_grams > 0
+  weight_grams  Int
+  order_details OrderDetail[]
+}
+
+model Order {
+  id_order       Int           @id(map: "PK_Order") @default(autoincrement())
+  id_reservation Int?          @unique(map: "UQ_Order_Reservation")
+  id_waiter      Int
+  /// CHECK CHK_Order_Status: 'Оплачено', 'В очікуванні', 'Скасовано'
+  payment_status String        @db.NVarChar(20)
+  table_number   Int
+  /// CHECK CHK_Order_Tips: tips >= 0
+  tips           Decimal       @default(0, map: "DF_Order_Tips") @db.Decimal(10, 2)
+  reservation    Reservation?  @relation(fields: [id_reservation], references: [id_reservation], onDelete: NoAction, onUpdate: NoAction, map: "FK_Order_Reservation")
+  table          Table         @relation(fields: [table_number], references: [table_number], onUpdate: NoAction, map: "FK_Order_Table")
+  waiter         Waiter        @relation(fields: [id_waiter], references: [id_waiter], onUpdate: NoAction, map: "FK_Order_Waiter")
+  order_details  OrderDetail[]
+}
+
+model OrderDetail {
+  id_order Int
+  id_dish  Int
+  /// CHECK CHK_OrderDetail_Quantity: quantity > 0
+  quantity Int
+  dish     Dish  @relation(fields: [id_dish], references: [id_dish], onUpdate: NoAction, map: "FK_OrderDetail_Dish")
+  order    Order @relation(fields: [id_order], references: [id_order], onDelete: Cascade, onUpdate: NoAction, map: "FK_OrderDetail_Order")
+
+  @@id([id_order, id_dish], map: "PK_OrderDetail")
+}
+
+model Reservation {
+  id_reservation     Int      @id(map: "PK_Reservation") @default(autoincrement())
+  id_visitor         Int
+  table_number       Int
+  date_time          DateTime @db.DateTime
+  /// CHECK CHK_Reservation_People: people_count > 0
+  people_count       Int
+  /// CHECK CHK_Reservation_Status: 'Активне', 'Скасоване', 'Завершене'
+  reservation_status String   @default("Активне", map: "DF_Reservation_Status") @db.NVarChar(20)
+  order              Order?
+  table              Table    @relation(fields: [table_number], references: [table_number], onUpdate: NoAction, map: "FK_Reservation_Table")
+  visitor            Visitor  @relation(fields: [id_visitor], references: [id_visitor], onUpdate: NoAction, map: "FK_Reservation_Visitor")
+}
+
+/// Службова таблиця SSMS для діаграм бази. Застосунок її не використовує.
+model sysdiagrams {
+  name         String @db.NVarChar(128)
+  principal_id Int
+  diagram_id   Int    @id(map: "PK__sysdiagr__C2B05B6186F14DB0") @default(autoincrement())
+  version      Int?
+  definition   Bytes?
+
+  @@unique([principal_id, name], map: "UK_principal_name")
+  @@ignore
+}
+
+model Table {
+  table_number Int           @id(map: "PK_Table")
+  /// CHECK CHK_Table_Capacity: capacity > 0
+  capacity     Int
+  orders       Order[]
+  reservations Reservation[]
+}
+
+model Visitor {
+  id_visitor   Int           @id(map: "PK_Visitor") @default(autoincrement())
+  full_name    String        @db.NVarChar(100)
+  phone_number String        @unique(map: "UQ_Visitor_Phone") @db.VarChar(20)
+  reservations Reservation[]
+}
+
+model Waiter {
+  id_waiter Int     @id(map: "PK_Waiter") @default(autoincrement())
+  full_name String  @db.NVarChar(100)
+  orders    Order[]
 }
