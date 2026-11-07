@@ -6,8 +6,9 @@
 Стек: React + Vite + Material UI (клієнт), Node.js + Express (сервер), Microsoft SQL Server 2025 у
 Docker + Prisma ORM (дані). Запуск лише локальний.
 
-Поточний стан: **етап 4 — схема Prisma**. Моделі Prisma отримано з наявної бази; клієнт поки показує
-лише стан сервера й бази даних. CRUD і запити додаються на наступних етапах.
+Поточний стан: **етап 5 — окрема база курсової, виправлення структури, демо-дані**. Застосунок працює з
+базою `RestaurantDB_KR`; клієнт поки показує лише стан сервера й бази даних. CRUD і запити додаються на
+наступних етапах.
 
 ## Структура
 
@@ -22,9 +23,10 @@ database/
   scripts/
     restore.sql        відновлення RestaurantDB з бекапу, лише якщо бази ще немає
     check_structure.sql знімок структури бази (лише читання)
+    stage5/            база курсової RestaurantDB_KR: створення, бекап, виправлення, демо-дані
   reports/             результати перевірок (у git не потрапляють)
 docs/                  даталогічна модель (draw.io і PNG)
-docker-compose.yml     контейнер SQL Server + одноразове відновлення бази
+docker-compose.yml     контейнер SQL Server, одноразове відновлення бази, інструмент sqlcmd
 .env.example           змінні для контейнера (пароль sa, порт)
 server/.env.example    змінні серверної частини (DATABASE_URL, PORT)
 ```
@@ -48,6 +50,43 @@ server/.env.example    змінні серверної частини (DATABASE_
 5. Перевірка: `docker compose ps -a` — `restaurantdb-mssql` у стані `healthy`, `restaurantdb-mssql-init` —
    `Exited (0)`; `docker compose logs db-init` закінчується рядком про знімок структури.
 
+## База курсової RestaurantDB_KR
+
+У контейнері дві бази з одного бекапу:
+
+| База              | Хто користується                         | Чи змінюється курсовою                |
+| ----------------- | ---------------------------------------- | ------------------------------------- |
+| `RestaurantDB`    | практичні 3.1(5) і 3.2(6), інші програми | ні, лишається як у бекапі             |
+| `RestaurantDB_KR` | цей застосунок (`DATABASE_URL`)          | так: виправлення структури, демо-дані |
+
+Створення й підготовка `RestaurantDB_KR` (один раз, після запуску контейнерів; у Git Bash або терміналі
+PyCharm у корені проєкту):
+
+```bash
+docker compose run --rm --no-deps sqlcmd stage5/01_create_coursework_db.sql stage5/02_backup_coursework_db.sql stage5/03_fix_structure.sql stage5/04_demo_data.sql
+```
+
+| Скрипт                        | Що робить                                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `01_create_coursework_db.sql` | відновлює `RestaurantDB.bak` під назвою `RestaurantDB_KR` з окремими файлами; якщо база є, пропускає |
+| `02_backup_coursework_db.sql` | повний бекап `RestaurantDB_KR` у `/var/opt/mssql/backup/` у контейнері з перевіркою `VERIFYONLY`     |
+| `03_fix_structure.sql`        | замінює `UQ_Order_Reservation` фільтрованим індексом `UX_Order_Reservation`, вимикає `AUTO_CLOSE`    |
+| `04_demo_data.sql`            | лише додає демо-дані для CRUD і запитів; повторний запуск нічого не дублює                           |
+
+Усі скрипти можна запускати повторно. Сервіс `sqlcmd` (профіль `tools`) запускається лише командою
+`docker compose run` і виконує файли з `database/scripts` по черзі, зупиняючись на першій помилці.
+
+**Чому фільтрований індекс.** Обмеження `UNIQUE` на стовпці, що допускає `NULL`, у SQL Server дозволяє
+лише один `NULL`, тобто лише одне замовлення без бронювання. Індекс
+`UNIQUE ... WHERE id_reservation IS NOT NULL` так само не дає зробити два замовлення до одного
+бронювання, але замовлень без бронювання може бути скільки завгодно. Фільтрований індекс вимагає
+`SET QUOTED_IDENTIFIER ON` під час зміни даних таблиці `[Order]`: PyCharm, SSMS, JDBC і Prisma вмикають
+його самі, у `sqlcmd` потрібен ключ `-I` (сервіс `sqlcmd` його передає).
+
+Бекап перед будь-якою наступною зміною структури:
+`docker compose run --rm --no-deps sqlcmd stage5/02_backup_coursework_db.sql`. Скопіювати бекап на диск:
+`docker cp restaurantdb-mssql:/var/opt/mssql/backup/<файл>.bak database/backup/`.
+
 ## Перший запуск застосунку
 
 Виконується після того, як база запущена (див. попередній розділ). Команди вводяться в терміналі PyCharm
@@ -57,7 +96,7 @@ server/.env.example    змінні серверної частини (DATABASE_
    `MSSQL_SA_PASSWORD` з кореневого `.env`. Якщо змінювали `MSSQL_PORT`, замініть і порт `1433`.
 2. Установіть залежності: `npm run install:all`. Після встановлення серверних пакетів Prisma сама
    виконає `prisma generate`.
-3. Перевірте підключення сервера до бази: `npm run db:check`. Очікувано: назва бази `RestaurantDB`,
+3. Перевірте підключення сервера до бази: `npm run db:check`. Очікувано: назва бази `RestaurantDB_KR`,
    версія SQL Server і 7 таблиць.
 4. Перевірте читання через моделі Prisma: `npm run db:sample`. Очікувано: кількість записів у кожній
    таблиці і перше замовлення з позиціями.
@@ -66,11 +105,11 @@ server/.env.example    змінні серверної частини (DATABASE_
 
 ## Перевірки працездатності
 
-| Адреса                | Очікувана відповідь                                                    |
-| --------------------- | ---------------------------------------------------------------------- |
-| `GET /api/health`     | `{"status":"ok", ...}`                                                 |
-| `GET /api/health/db`  | `{"status":"ok","database":"connected","name":"RestaurantDB"}` або 503 |
-| http://localhost:5173 | сторінка зі станом клієнта, сервера та бази даних                      |
+| Адреса                | Очікувана відповідь                                                       |
+| --------------------- | ------------------------------------------------------------------------- |
+| `GET /api/health`     | `{"status":"ok", ...}`                                                    |
+| `GET /api/health/db`  | `{"status":"ok","database":"connected","name":"RestaurantDB_KR"}` або 503 |
+| http://localhost:5173 | сторінка зі станом клієнта, сервера та бази даних                         |
 
 ## Схема Prisma
 
@@ -85,17 +124,20 @@ server/.env.example    змінні серверної частини (DATABASE_
 - Службова таблиця SSMS `sysdiagrams` позначена `@@ignore`: у клієнті Prisma її немає.
 - Значення за замовчуванням для `reservation_status` виправлено на `"Активне"`: `db pull` читає його як
   `"N'Активне'"`, і таке значення порушує CHECK під час вставки.
+- `Order.id_reservation` позначено `@unique(map: "UX_Order_Reservation")`, а `Reservation.order` —
+  `Order?` (одне бронювання — не більше одного замовлення). Фільтровані індекси Prisma не читає, тому
+  без цього `db pull` зробив би `Reservation.order` списком. Обидва виправлення робить `fix-schema.js`.
 
 ## Зміни структури бази
 
 Структуру змінюємо SQL-скриптами, а схему Prisma після цього оновлюємо з бази:
 
-1. Перед зміною зробіть бекап бази (скрипт для цього з'явиться на етапі 5).
-2. Напишіть SQL-скрипт у `database/scripts/` і виконайте його в PyCharm (Database Tools) або через
-   `sqlcmd` у контейнері.
+1. Перед зміною зробіть бекап бази: `docker compose run --rm --no-deps sqlcmd stage5/02_backup_coursework_db.sql`.
+2. Напишіть SQL-скрипт у `database/scripts/` і виконайте його в PyCharm (Database Tools) або
+   `docker compose run --rm --no-deps sqlcmd <шлях від database/scripts>`. Змінюйте лише `RestaurantDB_KR`.
 3. Зупиніть сервер (`npm run dev:server`), щоб Windows не блокувала файли Prisma.
 4. Виконайте `npm run db:pull`. Він запускає `prisma db pull`, скрипт `server/scripts/fix-schema.js`,
-   який повертає виправлення, що їх `db pull` скидає, і `prisma generate`.
+   який повертає виправлення, що їх `db pull` скидає, `prisma format` і `prisma generate`.
 5. Перегляньте зміни `schema.prisma` у PyCharm (Git → Commit) і закомітьте скрипт разом зі схемою.
 
 Повторний `db pull` зберігає назви зв'язків, коментарі `///` і `@@ignore`. Не запускайте
@@ -104,15 +146,15 @@ server/.env.example    змінні серверної частини (DATABASE_
 
 ## Підключення до бази з IDE
 
-| Параметр       | Значення                                              |
-| -------------- | ----------------------------------------------------- |
-| Сервер         | `localhost`, порт `1433` (`MSSQL_PORT`)               |
-| Автентифікація | SQL Server, користувач `sa`, пароль з `.env`          |
-| База даних     | `RestaurantDB`                                        |
-| Сертифікат     | довіряти сертифікату сервера (trustServerCertificate) |
+| Параметр       | Значення                                                |
+| -------------- | ------------------------------------------------------- |
+| Сервер         | `localhost`, порт `1433` (`MSSQL_PORT`)                 |
+| Автентифікація | SQL Server, користувач `sa`, пароль з `.env`            |
+| База даних     | `RestaurantDB_KR` (курсова), `RestaurantDB` (практичні) |
+| Сертифікат     | довіряти сертифікату сервера (trustServerCertificate)   |
 
 - **PyCharm** (Database Tools): **+** → **Data Source** → **Microsoft SQL Server**; Host `localhost`,
-  Port `1433`, Authentication `User & Password`, User `sa`, Database `RestaurantDB`; на вкладці
+  Port `1433`, Authentication `User & Password`, User `sa`, Database `RestaurantDB_KR`; на вкладці
   **Advanced** встановіть `trustServerCertificate` = `true`.
 - **SSMS**: Server name `localhost,1433` (порт через кому), Authentication `SQL Server Authentication`,
   Login `sa`, позначка **Trust server certificate**.
@@ -121,8 +163,8 @@ server/.env.example    змінні серверної частини (DATABASE_
 
 ## Повторні запуски і дані
 
-- Під час кожного `up` сервіс `db-init` перевіряє, чи є база. Якщо є, нічого не відновлює, лише
-  оновлює звіт.
+- Під час кожного `up` сервіс `db-init` перевіряє, чи є база `RestaurantDB`. Якщо є, нічого не
+  відновлює, лише оновлює звіт. `RestaurantDB_KR` він не створює й не змінює (див. розділ про неї).
 - Дані зберігаються в томі Docker `restaurantdb-coursework_restaurantdb-mssql-data` і не зникають після
   `docker compose down` чи перезавантаження комп'ютера.
 - `docker compose down -v` **видаляє том разом з усіма змінами в базі**. Не використовуйте без потреби.

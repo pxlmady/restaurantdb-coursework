@@ -24,7 +24,8 @@ model Dish {
 
 model Order {
   id_order       Int           @id(map: "PK_Order") @default(autoincrement())
-  id_reservation Int?          @unique(map: "UQ_Order_Reservation")
+  /// Унікальність: фільтрований індекс UX_Order_Reservation (WHERE id_reservation IS NOT NULL)
+  id_reservation Int?          @unique(map: "UX_Order_Reservation")
   id_waiter      Int
   /// CHECK CHK_Order_Status: 'Оплачено', 'В очікуванні', 'Скасовано'
   payment_status String        @db.NVarChar(20)

@@ -54,5 +54,30 @@ services:
         echo "Знімок структури записано в database/reports/check_structure.txt"
     restart: 'no'
 
+  # Інструмент для запуску SQL-скриптів з database/scripts (етап 5 і далі).
+  # Під час `docker compose up` не запускається (профіль tools), лише командою:
+  #   docker compose run --rm --no-deps sqlcmd stage5/01_create_coursework_db.sql [інші файли...]
+  # Файли виконуються по черзі; на першій помилці виконання зупиняється.
+  # Шляхи вказуються відносно database/scripts, тому в Git Bash їх не псує перетворення шляхів.
+  sqlcmd:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    profiles: ['tools']
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SQLCMDPASSWORD: ${MSSQL_SA_PASSWORD:?Задайте MSSQL_SA_PASSWORD у .env}
+    volumes:
+      - ./database/scripts:/scripts:ro
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        for f in "$$@"; do echo "=== $$f";
+        /opt/mssql-tools18/bin/sqlcmd -C -S db -U sa -b -f 65001 -I -W -i "/scripts/$$f" || exit 1;
+        done
+      - sqlcmd
+    restart: 'no'
+
 volumes:
   restaurantdb-mssql-data:
