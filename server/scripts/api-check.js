@@ -1,0 +1,381 @@
+// Перевірка CRUD API через HTTP (етап 6). Потрібен запущений сервер: npm run dev:server.
+// Сценарій створює власні тестові записи (телефон +38099..., назви з позначкою «API-тест»),
+// перевіряє правила й помилки, а наприкінці видаляє все, що створив.
+// Наявні записи бази лише читаються. Запуск: npm run api:check
+const BASE = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 3000}/api`;
+const stamp = Date.now().toString().slice(-7);
+
+let passed = 0;
+let failed = 0;
+const created = []; // [шлях для DELETE] у порядку створення
+
+const call = async (method, path, body) => {
+  const response = await fetch(BASE + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  return { status: response.status, body: text ? JSON.parse(text) : null };
+};
+
+const check = (name, condition, extra = '') => {
+  if (condition) {
+    passed += 1;
+    console.log(`  ✓ ${name}`);
+  } else {
+    failed += 1;
+    console.log(`  ✗ ${name} ${extra}`);
+  }
+};
+
+// Запит з очікуваним статусом
+const expect = async (name, method, path, body, status) => {
+  const result = await call(method, path, body);
+  check(
+    `${name} → ${status}`,
+    result.status === status,
+    `(отримано ${result.status}: ${JSON.stringify(result.body?.error ?? result.body)})`,
+  );
+  return result.body;
+};
+
+const counts = async () => {
+  const resources = ['visitors', 'tables', 'waiters', 'dishes', 'reservations', 'orders'];
+  const lists = await Promise.all(resources.map((r) => call('GET', `/${r}`)));
+  return Object.fromEntries(resources.map((r, i) => [r, lists[i].body.length]));
+};
+
+const run = async () => {
+  const health = await call('GET', '/health/db').catch(() => null);
+  if (!health || health.status !== 200) {
+    console.error(`Сервер або база недоступні за адресою ${BASE}. Запустіть npm run dev:server.`);
+    process.exit(1);
+  }
+  console.log('Довідники');
+  const dict = await expect('GET /dictionaries', 'GET', '/dictionaries', null, 200);
+  check(
+    '3 статуси бронювання і 3 статуси оплати',
+    dict.reservation_statuses.length === 3 && dict.payment_statuses.length === 3,
+  );
+
+  console.log('Відвідувачі');
+  const visitor = await expect(
+    'створення',
+    'POST',
+    '/visitors',
+    { full_name: 'API-тест Відвідувач', phone_number: `+38099${stamp}` },
+    201,
+  );
+  created.push(`/visitors/${visitor.id_visitor}`);
+  await expect(
+    'дубль телефону',
+    'POST',
+    '/visitors',
+    { full_name: 'Інший', phone_number: `+38099${stamp}` },
+    409,
+  );
+  await expect('порожнє ім’я', 'POST', '/visitors', { full_name: ' ', phone_number: '+380' }, 400);
+  const v2 = await expect(
+    'редагування',
+    'PUT',
+    `/visitors/${visitor.id_visitor}`,
+    { full_name: 'API-тест Відвідувач (змінено)', phone_number: `+38099${stamp}` },
+    200,
+  );
+  check('ім’я змінено', v2.full_name.endsWith('(змінено)'));
+  await expect('неіснуючий', 'GET', '/visitors/999999', null, 404);
+  await expect('некоректний id', 'GET', '/visitors/abc', null, 400);
+
+  console.log('Столики');
+  const tables = (await call('GET', '/tables')).body;
+  const tableNumber = Math.max(...tables.map((t) => t.table_number)) + 100;
+  const table = await expect(
+    'створення',
+    'POST',
+    '/tables',
+    { table_number: tableNumber, capacity: 2 },
+    201,
+  );
+  created.push(`/tables/${table.table_number}`);
+  await expect('дубль номера', 'POST', '/tables', { table_number: tableNumber, capacity: 4 }, 409);
+  await expect(
+    'місткість 0',
+    'POST',
+    '/tables',
+    { table_number: tableNumber + 1, capacity: 0 },
+    400,
+  );
+  const t2 = await expect(
+    'редагування місткості',
+    'PUT',
+    `/tables/${tableNumber}`,
+    { table_number: 1, capacity: 4 },
+    200,
+  );
+  check('номер не змінився, місткість 4', t2.table_number === tableNumber && t2.capacity === 4);
+
+  console.log('Офіціанти');
+  const waiter = await expect(
+    'створення',
+    'POST',
+    '/waiters',
+    { full_name: 'API-тест Офіціант' },
+    201,
+  );
+  created.push(`/waiters/${waiter.id_waiter}`);
+  await expect('задовге ім’я', 'POST', '/waiters', { full_name: 'я'.repeat(101) }, 400);
+  await expect(
+    'редагування',
+    'PUT',
+    `/waiters/${waiter.id_waiter}`,
+    { full_name: 'API-тест Офіціантка' },
+    200,
+  );
+
+  console.log('Страви');
+  const dish = await expect(
+    'створення',
+    'POST',
+    '/dishes',
+    { title: `API-тест страва ${stamp}`, price: '99.50', weight_grams: 200 },
+    201,
+  );
+  created.push(`/dishes/${dish.id_dish}`);
+  check('ціна у форматі 99.50', dish.price === '99.50');
+  await expect(
+    'дубль назви',
+    'POST',
+    '/dishes',
+    { title: `API-тест страва ${stamp}`, price: 1, weight_grams: 1 },
+    409,
+  );
+  await expect(
+    'від’ємна ціна',
+    'POST',
+    '/dishes',
+    { title: `API-тест x ${stamp}`, price: -1, weight_grams: 1 },
+    400,
+  );
+  await expect(
+    'редагування',
+    'PUT',
+    `/dishes/${dish.id_dish}`,
+    { title: `API-тест страва ${stamp}`, price: 100, weight_grams: 210 },
+    200,
+  );
+
+  console.log('Бронювання');
+  const resBody = {
+    id_visitor: visitor.id_visitor,
+    table_number: tableNumber,
+    date_time: '2026-12-31T19:30',
+    people_count: 3,
+  };
+  await expect(
+    'осіб більше за місткість',
+    'POST',
+    '/reservations',
+    { ...resBody, people_count: 5 },
+    400,
+  );
+  await expect(
+    'неіснуючий відвідувач',
+    'POST',
+    '/reservations',
+    { ...resBody, id_visitor: 999999 },
+    400,
+  );
+  await expect(
+    'неіснуюча дата 31.02',
+    'POST',
+    '/reservations',
+    { ...resBody, date_time: '2026-02-31T10:00' },
+    400,
+  );
+  await expect(
+    'недопустимий статус',
+    'POST',
+    '/reservations',
+    { ...resBody, reservation_status: 'Невідомо' },
+    400,
+  );
+  const reservation = await expect('створення', 'POST', '/reservations', resBody, 201);
+  created.push(`/reservations/${reservation.id_reservation}`);
+  check(
+    'статус за замовчуванням «Активне», час без зсуву',
+    reservation.reservation_status === 'Активне' && reservation.date_time === '2026-12-31T19:30',
+  );
+
+  console.log('Замовлення');
+  const anyDish = (await call('GET', '/dishes')).body.find((d) => d.id_dish !== dish.id_dish);
+  const ordersBefore = (await call('GET', '/orders')).body.length;
+  await expect(
+    'страва не існує (транзакція відкочується)',
+    'POST',
+    '/orders',
+    {
+      id_reservation: reservation.id_reservation,
+      id_waiter: waiter.id_waiter,
+      payment_status: 'В очікуванні',
+      details: [{ id_dish: 999999, quantity: 1 }],
+    },
+    400,
+  );
+  check(
+    'після відкату замовлень стільки ж',
+    (await call('GET', '/orders')).body.length === ordersBefore,
+  );
+  const order = await expect(
+    'створення з 2 позиціями',
+    'POST',
+    '/orders',
+    {
+      id_reservation: reservation.id_reservation,
+      id_waiter: waiter.id_waiter,
+      table_number: 1,
+      payment_status: 'В очікуванні',
+      details: [
+        { id_dish: dish.id_dish, quantity: 2 },
+        { id_dish: anyDish.id_dish, quantity: 1 },
+      ],
+    },
+    201,
+  );
+  created.push(`/orders/${order.id_order}`);
+  check('столик узято з бронювання', order.table_number === tableNumber);
+  const expectedTotal = (200 + Number(anyDish.price)).toFixed(2);
+  check(`сума ${expectedTotal}`, order.total === expectedTotal, `(отримано ${order.total})`);
+  await expect(
+    'друге замовлення на те саме бронювання',
+    'POST',
+    '/orders',
+    {
+      id_reservation: reservation.id_reservation,
+      id_waiter: waiter.id_waiter,
+      payment_status: 'Оплачено',
+    },
+    409,
+  );
+  await expect(
+    'без бронювання і без столика',
+    'POST',
+    '/orders',
+    { id_waiter: waiter.id_waiter, payment_status: 'Оплачено' },
+    400,
+  );
+  await expect(
+    'дубль страви в позиціях',
+    'POST',
+    '/orders',
+    {
+      id_waiter: waiter.id_waiter,
+      table_number: tableNumber,
+      payment_status: 'Оплачено',
+      details: [
+        { id_dish: dish.id_dish, quantity: 1 },
+        { id_dish: dish.id_dish, quantity: 2 },
+      ],
+    },
+    400,
+  );
+  await expect(
+    'від’ємні чайові',
+    'PUT',
+    `/orders/${order.id_order}`,
+    {
+      id_reservation: reservation.id_reservation,
+      id_waiter: waiter.id_waiter,
+      payment_status: 'Оплачено',
+      tips: -5,
+    },
+    400,
+  );
+  const o2 = await expect(
+    'редагування шапки',
+    'PUT',
+    `/orders/${order.id_order}`,
+    {
+      id_reservation: reservation.id_reservation,
+      id_waiter: waiter.id_waiter,
+      payment_status: 'Оплачено',
+      tips: '25.00',
+    },
+    200,
+  );
+  check(
+    'статус і чайові змінено, позиції збережено',
+    o2.payment_status === 'Оплачено' && o2.tips === '25.00' && o2.items_count === 2,
+  );
+
+  console.log('Позиції замовлення');
+  const detailsPath = `/orders/${order.id_order}/details`;
+  await expect('дубль страви', 'POST', detailsPath, { id_dish: dish.id_dish, quantity: 1 }, 409);
+  await expect('кількість 0', 'PUT', `${detailsPath}/${dish.id_dish}`, { quantity: 0 }, 400);
+  const d2 = await expect(
+    'зміна кількості',
+    'PUT',
+    `${detailsPath}/${dish.id_dish}`,
+    { quantity: 3 },
+    200,
+  );
+  check('сума позиції 300.00', d2.line_total === '300.00');
+  await expect('видалення позиції', 'DELETE', `${detailsPath}/${anyDish.id_dish}`, null, 204);
+  await expect(
+    'додавання позиції',
+    'POST',
+    detailsPath,
+    { id_dish: anyDish.id_dish, quantity: 1 },
+    201,
+  );
+  const list = await expect('список позицій', 'GET', detailsPath, null, 200);
+  check('2 позиції', list.length === 2);
+
+  console.log('Заборонені видалення (є пов’язані записи)');
+  await expect('відвідувач з бронюванням', 'DELETE', `/visitors/${visitor.id_visitor}`, null, 409);
+  await expect('столик з бронюванням', 'DELETE', `/tables/${tableNumber}`, null, 409);
+  await expect('офіціант із замовленням', 'DELETE', `/waiters/${waiter.id_waiter}`, null, 409);
+  await expect('страва в замовленні', 'DELETE', `/dishes/${dish.id_dish}`, null, 409);
+  await expect(
+    'бронювання із замовленням',
+    'DELETE',
+    `/reservations/${reservation.id_reservation}`,
+    null,
+    409,
+  );
+  await expect(
+    'зміна столика бронювання із замовленням',
+    'PUT',
+    `/reservations/${reservation.id_reservation}`,
+    { ...resBody, table_number: 1, people_count: 2 },
+    409,
+  );
+};
+
+const cleanup = async () => {
+  console.log('Видалення тестових записів');
+  for (const path of created.reverse()) {
+    await expect(`DELETE ${path}`, 'DELETE', path, null, 204);
+    await expect(`GET ${path}`, 'GET', path, null, 404);
+  }
+};
+
+try {
+  const before = await counts().catch(() => null);
+  await run();
+  await cleanup();
+  if (before) {
+    const after = await counts();
+    check(
+      'кількість записів як до перевірки',
+      JSON.stringify(before) === JSON.stringify(after),
+      JSON.stringify({ before, after }),
+    );
+  }
+} catch (err) {
+  failed += 1;
+  console.error('Перевірку перервано:', err.message);
+  if (created.length) await cleanup().catch(() => {});
+}
+console.log(`\nУспішно: ${passed}, помилок: ${failed}`);
+process.exitCode = failed > 0 ? 1 : 0;

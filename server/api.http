@@ -1,0 +1,72 @@
+### Приклади запитів до CRUD API RestaurantDB (етап 6).
+### У PyCharm: відкрийте файл і натисніть ▶ біля запиту. Спершу запустіть npm run dev:server.
+### Запити зі зміною даних (POST/PUT/DELETE) змінюють базу RestaurantDB_KR — ідентифікатори
+### в адресах підставте свої (з відповіді на POST або зі списку).
+
+@api = http://localhost:3000/api
+
+### Довідники статусів
+GET {{api}}/dictionaries
+
+### Відвідувачі
+GET {{api}}/visitors
+
+### Створити відвідувача
+POST {{api}}/visitors
+Content-Type: application/json
+
+{ "full_name": "Демо Відвідувач", "phone_number": "+380991234567" }
+
+### Змінити відвідувача (id замініть)
+PUT {{api}}/visitors/10
+Content-Type: application/json
+
+{ "full_name": "Демо Відвідувач (змінено)", "phone_number": "+380991234567" }
+
+### Видалити відвідувача з бронюваннями → 409
+DELETE {{api}}/visitors/1
+
+### Столики
+GET {{api}}/tables
+
+### Офіціанти
+GET {{api}}/waiters
+
+### Меню
+GET {{api}}/dishes
+
+### Страва з від'ємною ціною → 400 з поясненням по полях
+POST {{api}}/dishes
+Content-Type: application/json
+
+{ "title": "Тест", "price": -1, "weight_grams": 100 }
+
+### Бронювання (без замовлення — для форми замовлення)
+GET {{api}}/reservations?without_order=true
+
+### Бронювання: осіб більше, ніж місць за столиком → 400
+POST {{api}}/reservations
+Content-Type: application/json
+
+{ "id_visitor": 1, "table_number": 3, "date_time": "2026-12-01T19:00", "people_count": 5 }
+
+### Замовлення з позиціями та сумою
+GET {{api}}/orders/1
+
+### Створити замовлення без бронювання разом з позиціями (одна транзакція)
+POST {{api}}/orders
+Content-Type: application/json
+
+{
+  "id_waiter": 1,
+  "table_number": 3,
+  "payment_status": "В очікуванні",
+  "tips": 0,
+  "details": [
+    { "id_dish": 1, "quantity": 2 },
+    { "id_dish": 2, "quantity": 1 }
+  ]
+}
+
+### Позиції замовлення
+GET {{api}}/orders/1/details
