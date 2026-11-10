@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { NAVIGATION } from '../navigation.jsx';
+import ColorModeMenu from './ColorModeMenu.jsx';
 
 const DRAWER_WIDTH = 240;
 
@@ -75,6 +76,8 @@ export default function Layout() {
           >
             база даних ресторану
           </Typography>
+          <Box sx={{ flexGrow: 1 }} />
+          <ColorModeMenu />
         </Toolbar>
       </AppBar>
 
