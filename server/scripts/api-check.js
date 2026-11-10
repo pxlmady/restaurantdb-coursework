@@ -206,6 +206,36 @@ const run = async () => {
     'статус за замовчуванням «Активне», час без зсуву',
     reservation.reservation_status === 'Активне' && reservation.date_time === '2026-12-31T19:30',
   );
+  await expect(
+    'той самий столик через 1 год 59 хв',
+    'POST',
+    '/reservations',
+    { ...resBody, date_time: '2026-12-31T21:29' },
+    409,
+  );
+  const cancelled = await expect(
+    'скасоване бронювання на той самий час дозволене',
+    'POST',
+    '/reservations',
+    { ...resBody, reservation_status: 'Скасоване' },
+    201,
+  );
+  created.push(`/reservations/${cancelled.id_reservation}`);
+  await expect(
+    'відновлення скасованого на зайнятий час',
+    'PUT',
+    `/reservations/${cancelled.id_reservation}`,
+    { ...resBody, reservation_status: 'Активне' },
+    409,
+  );
+  const later = await expect(
+    'той самий столик через 2 години',
+    'POST',
+    '/reservations',
+    { ...resBody, date_time: '2026-12-31T21:30' },
+    201,
+  );
+  created.push(`/reservations/${later.id_reservation}`);
 
   console.log('Замовлення');
   const anyDish = (await call('GET', '/dishes')).body.find((d) => d.id_dish !== dish.id_dish);
