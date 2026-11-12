@@ -40,6 +40,7 @@ function compare(a, b) {
 // Таблиця записів з пошуком, сортуванням за стовпцями і кнопками «Редагувати» / «Видалити».
 // columns: [{ field, label, align, render(row), sortValue(row), sortable, nowrap }]
 // renderDetail(row) — вміст рядка, що розгортається (наприклад, позиції замовлення).
+// Без onEdit і onDelete стовпця «Дії» немає (таблиці результатів запитів).
 // numbered — стовпець «№» з порядковим номером рядка 1, 2, 3… у поточному сортуванні.
 // Ідентифікатор з бази (IDENTITY) показується окремим стовпцем «ID»: у SQL Server він може мати
 // пропуски (кеш IDENTITY, видалені записи, відкочені транзакції), тому для підрахунку не годиться.
@@ -60,6 +61,7 @@ export default function DataTable({
   renderDetail,
   initialSort = null,
   numbered = true,
+  emptyText = 'Записів немає',
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState(initialSort); // { field, direction }
@@ -91,7 +93,9 @@ export default function DataTable({
     );
   };
 
-  const columnCount = columns.length + 1 + (renderDetail ? 1 : 0) + (numbered ? 1 : 0);
+  const hasActions = Boolean(onEdit || onDelete);
+  const columnCount =
+    columns.length + (hasActions ? 1 : 0) + (renderDetail ? 1 : 0) + (numbered ? 1 : 0);
   const total = rows?.length ?? 0;
 
   return (
@@ -169,9 +173,11 @@ export default function DataTable({
                   )}
                 </TableCell>
               ))}
-              <TableCell align="right" sx={{ fontWeight: 600, width: 100 }}>
-                Дії
-              </TableCell>
+              {hasActions && (
+                <TableCell align="right" sx={{ fontWeight: 600, width: 100 }}>
+                  Дії
+                </TableCell>
+              )}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -204,22 +210,24 @@ export default function DataTable({
                         {column.render ? column.render(row) : row[column.field]}
                       </TableCell>
                     ))}
-                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      {onEdit && (
-                        <Tooltip title="Редагувати">
-                          <IconButton size="small" onClick={() => onEdit(row)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {onDelete && (
-                        <Tooltip title="Видалити">
-                          <IconButton size="small" color="error" onClick={() => onDelete(row)}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </TableCell>
+                    {hasActions && (
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        {onEdit && (
+                          <Tooltip title="Редагувати">
+                            <IconButton size="small" onClick={() => onEdit(row)}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {onDelete && (
+                          <Tooltip title="Видалити">
+                            <IconButton size="small" color="error" onClick={() => onDelete(row)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                   {renderDetail && (
                     <TableRow>
@@ -237,7 +245,7 @@ export default function DataTable({
               <TableRow>
                 <TableCell colSpan={columnCount} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
-                    {total === 0 ? 'Записів немає' : 'Нічого не знайдено'}
+                    {total === 0 ? emptyText : 'Нічого не знайдено'}
                   </Typography>
                 </TableCell>
               </TableRow>

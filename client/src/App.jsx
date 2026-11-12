@@ -8,8 +8,11 @@ import DishesPage from './pages/DishesPage.jsx';
 import ReservationsPage from './pages/ReservationsPage.jsx';
 import OrdersPage from './pages/OrdersPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
+import QueryRoute from './pages/queries/QueryRoute.jsx';
+import { QUERY_DEFINITIONS } from './pages/queries/definitions.jsx';
 
-// Маршрути клієнта: кожен розділ меню має власну адресу (/visitors, /orders тощо)
+// Маршрути клієнта: кожен розділ меню має власну адресу (/visitors, /orders тощо);
+// запити Q1–Q8 — /queries/<endpoint>, як і на сервері (/api/queries/<endpoint>)
 export default function App() {
   return (
     <Routes>
@@ -21,6 +24,13 @@ export default function App() {
         <Route path="dishes" element={<DishesPage />} />
         <Route path="reservations" element={<ReservationsPage />} />
         <Route path="orders" element={<OrdersPage />} />
+        {QUERY_DEFINITIONS.map((query) => (
+          <Route
+            key={query.code}
+            path={`queries/${query.endpoint}`}
+            element={<QueryRoute query={query} />}
+          />
+        ))}
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

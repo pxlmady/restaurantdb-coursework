@@ -8,6 +8,7 @@ import { waitersRouter } from './routes/waiters.js';
 import { dishesRouter } from './routes/dishes.js';
 import { reservationsRouter } from './routes/reservations.js';
 import { ordersRouter } from './routes/orders.js';
+import { queriesRouter } from './routes/queries.js';
 
 export const app = express();
 
@@ -23,6 +24,9 @@ app.use('/api/waiters', waitersRouter);
 app.use('/api/dishes', dishesRouter);
 app.use('/api/reservations', reservationsRouter);
 app.use('/api/orders', ordersRouter); // разом з позиціями: /api/orders/:id/details
+
+// Запити Q1–Q8: фільтрація, групування, агрегація, пошук (етап 8)
+app.use('/api/queries', queriesRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

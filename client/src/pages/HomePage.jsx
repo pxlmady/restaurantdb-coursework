@@ -65,7 +65,10 @@ export default function HomePage() {
     </Alert>
   );
 
-  const sections = NAVIGATION.flatMap((group) => group.items).filter((item) => item.path !== '/');
+  const sections = NAVIGATION.filter((group) => !group.queries)
+    .flatMap((group) => group.items)
+    .filter((item) => item.path !== '/');
+  const queries = NAVIGATION.find((group) => group.queries)?.items ?? [];
 
   return (
     <Box>
@@ -74,7 +77,7 @@ export default function HomePage() {
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 3 }}>
         Навчальний вебзастосунок для бази даних ресторану: перегляд, додавання, редагування й
-        видалення записів через Prisma ORM і SQL Server.
+        видалення записів через Prisma ORM і SQL Server, а також аналітичні запити Q1–Q8.
       </Typography>
 
       <Box
@@ -102,6 +105,34 @@ export default function HomePage() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   записів
+                </Typography>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        ))}
+      </Box>
+
+      <Typography variant="h6" component="h2" gutterBottom>
+        Запити
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          mb: 4,
+        }}
+      >
+        {queries.map((item) => (
+          <Card key={item.path} variant="outlined">
+            <CardActionArea component={RouterLink} to={item.path} sx={{ height: '100%' }}>
+              <CardContent>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+                  {item.icon}
+                  <Typography variant="subtitle1">{item.label}</Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {item.query.technique}
                 </Typography>
               </CardContent>
             </CardActionArea>

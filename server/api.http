@@ -70,3 +70,27 @@ Content-Type: application/json
 
 ### Позиції замовлення
 GET {{api}}/orders/1/details
+
+### Запити Q1–Q8 (етап 8)
+GET {{api}}/queries/order-details?payment_status=Оплачено
+
+###
+GET {{api}}/queries/visitor-spending?from=2026-10-01&to=2026-10-31&min_total=1000
+
+###
+GET {{api}}/queries/no-expensive-dishes?price=200
+
+###
+GET {{api}}/queries/without-activity?mode=dishes_not_ordered
+
+###
+GET {{api}}/queries/dish-stats?payment_status=Оплачено&min_portions=5
+
+###
+GET {{api}}/queries/reservation-search?from=2026-11-01&reservation_status=Активне&visitor=петренко
+
+###
+GET {{api}}/queries/waiter-totals
+
+###
+GET {{api}}/queries/free-tables?date_time=2026-11-08T19:00&people_count=4

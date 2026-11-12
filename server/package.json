@@ -13,6 +13,7 @@
     "db:check": "node scripts/check-db.js",
     "db:sample": "node scripts/read-sample.js",
     "api:check": "node scripts/api-check.js",
+    "queries:check": "node scripts/queries-check.js",
     "db:pull": "prisma db pull && node scripts/fix-schema.js && prisma format && prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",

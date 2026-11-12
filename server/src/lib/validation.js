@@ -78,6 +78,18 @@ export const dateTime = rule((value) => {
   return date;
 });
 
+// Дата без часу: "2026-11-08". Як і dateTime, будуємо її як UTC (див. lib/format.js).
+export const date = rule((value) => {
+  const match = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) throw new ValidationIssue('Очікується дата у форматі РРРР-ММ-ДД');
+  const [, y, mo, d] = match.map(Number);
+  const result = new Date(Date.UTC(y, mo - 1, d));
+  if (result.getUTCMonth() !== mo - 1 || result.getUTCDate() !== d || y < 1753 || y > 9998) {
+    throw new ValidationIssue('Такої дати не існує');
+  }
+  return result;
+});
+
 // Перевіряє поля body за схемою { поле: правило } і повертає об'єкт лише з цими полями
 export const validate = (body, schema) => {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {

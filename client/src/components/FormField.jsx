@@ -1,7 +1,7 @@
 import { Autocomplete, MenuItem, TextField } from '@mui/material';
 
 // Одне поле форми за описом:
-// { name, label, type: 'text' | 'number' | 'money' | 'datetime' | 'select' | 'autocomplete',
+// { name, label, type: 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'autocomplete',
 //   options: [{ value, label }], required, disabled, helperText, autoFocus, min }
 export default function FormField({ field, value, error, onChange }) {
   const common = {
@@ -38,6 +38,12 @@ export default function FormField({ field, value, error, onChange }) {
         {...common}
         select
         value={value ?? ''}
+        // Варіант із порожнім значенням («Усі») показується, а не лишає поле порожнім
+        slotProps={
+          field.options.some((o) => o.value === '')
+            ? { select: { displayEmpty: true }, inputLabel: { shrink: true } }
+            : undefined
+        }
         onChange={(e) => onChange(field.name, e.target.value)}
       >
         {field.options.map((option) => (
@@ -53,6 +59,7 @@ export default function FormField({ field, value, error, onChange }) {
     number: { type: 'number', slotProps: { htmlInput: { min: field.min ?? 1, step: 1 } } },
     money: { slotProps: { htmlInput: { inputMode: 'decimal' } } },
     datetime: { type: 'datetime-local', slotProps: { inputLabel: { shrink: true } } },
+    date: { type: 'date', slotProps: { inputLabel: { shrink: true } } },
   }[field.type] ?? { slotProps: { htmlInput: { maxLength: field.maxLength } } };
 
   return (
