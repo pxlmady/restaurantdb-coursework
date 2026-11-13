@@ -22,6 +22,7 @@ const CHECK_MESSAGES = {
   CHK_Reservation_Status: ['reservation_status', 'Недопустимий статус бронювання'],
   CHK_Order_Status: ['payment_status', 'Недопустимий статус оплати'],
   CHK_Order_Tips: ['tips', 'Чайові не можуть бути від’ємними'],
+  CHK_Order_Discount: ['discount_percent', 'Знижка має бути від 0 до 100 %'],
   CHK_OrderDetail_Quantity: ['quantity', 'Кількість має бути більшою за 0'],
 };
 

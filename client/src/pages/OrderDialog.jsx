@@ -20,7 +20,9 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import { splitApiError } from '../api/client.js';
+import DiscountSummary from '../components/DiscountSummary.jsx';
 import FormField from '../components/FormField.jsx';
+import { useDiscountPreview } from '../hooks/useDiscountPreview.js';
 import { formatDateTime } from '../lib/format.js';
 
 // Гроші рахуємо в копійках цілими числами, щоб уникнути похибок дробових чисел
@@ -142,6 +144,16 @@ export default function OrderDialog({ row, lookups, onSubmit, onClose }) {
       ? sum + toCents(dish.price) * quantity
       : sum;
   }, 0);
+
+  // Етап 9: знижку визначає сервер; форма показує попередній розрахунок за поточними даними
+  const discount = useDiscountPreview({
+    id_order: row?.id_order ?? null,
+    id_reservation: values.id_reservation || null,
+    payment_status: values.payment_status,
+    details: lines
+      .filter((line) => dishOf(line.id_dish) && /^\d+$/.test(String(line.quantity).trim()))
+      .map((line) => ({ id_dish: Number(line.id_dish), quantity: Number(line.quantity) })),
+  });
 
   const submit = async (event) => {
     event.preventDefault();
@@ -273,8 +285,11 @@ export default function OrderDialog({ row, lookups, onSubmit, onClose }) {
               Додати страву
             </Button>
             <Box sx={{ flexGrow: 1 }} />
-            <Typography sx={{ fontWeight: 600 }}>Разом: {fromCents(totalCents)} грн</Typography>
+            <Typography sx={{ fontWeight: 600 }}>
+              Разом за меню: {fromCents(totalCents)} грн
+            </Typography>
           </Box>
+          <DiscountSummary {...discount} />
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose} disabled={busy}>

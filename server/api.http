@@ -71,6 +71,18 @@ Content-Type: application/json
 ### Позиції замовлення
 GET {{api}}/orders/1/details
 
+### Попередній розрахунок знижки (етап 9, у базі нічого не змінює; id_reservation — з таблиці бронювань)
+POST {{api}}/orders/discount-preview
+Content-Type: application/json
+
+{
+  "id_reservation": 15,
+  "details": [
+    { "id_dish": 1, "quantity": 10 },
+    { "id_dish": 2, "quantity": 5 }
+  ]
+}
+
 ### Запити Q1–Q8 (етап 8)
 GET {{api}}/queries/order-details?payment_status=Оплачено
 

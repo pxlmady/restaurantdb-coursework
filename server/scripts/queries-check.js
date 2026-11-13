@@ -62,6 +62,9 @@ const run = async () => {
   );
   const paid = orders.filter((o) => o.payment_status === 'Оплачено');
   const ordersTotal = (list) => sumCents(list, (o) => o.total);
+  // Етап 9: сума до сплати (після знижки) і сума знижок
+  const ordersDue = (list) => sumCents(list, (o) => o.total_due);
+  const ordersDiscount = (list) => sumCents(list, (o) => o.discount_amount);
 
   console.log('Q1. Деталізація замовлень (Prisma findMany)');
   const q1 = await expect('усі позиції', query('order-details'));
@@ -101,8 +104,8 @@ const run = async () => {
     query('visitor-spending', { payment_status: 'Оплачено' }),
   );
   check(
-    'сума = оплачені замовлення з бронюванням',
-    cents(q2.summary.total) === ordersTotal(paid.filter((o) => o.reservation && o.items_count > 0)),
+    'сума = оплачені замовлення з бронюванням (до сплати, після знижки)',
+    cents(q2.summary.total) === ordersDue(paid.filter((o) => o.reservation && o.items_count > 0)),
   );
   check(
     'відсортовано за сумою спадно',
@@ -249,7 +252,12 @@ const run = async () => {
   const q7 = await expect('усі замовлення', query('waiter-totals'));
   check('усі офіціанти, навіть без замовлень', q7.rows.length === waiters.length);
   check('кількість замовлень збігається', q7.summary.orders_count === orders.length);
-  check('виручка = сума замовлень', cents(q7.summary.revenue) === ordersTotal(orders));
+  check('виручка = сума замовлень до сплати', cents(q7.summary.revenue) === ordersDue(orders));
+  check('знижки = сума знижок замовлень', cents(q7.summary.discounts) === ordersDiscount(orders));
+  check(
+    'виручка + знижки = сума за цінами меню',
+    cents(q7.summary.revenue) + cents(q7.summary.discounts) === ordersTotal(orders),
+  );
   check(
     'чайові = сума чайових замовлень',
     cents(q7.summary.tips_total) === sumCents(orders, (o) => o.tips),
@@ -258,7 +266,7 @@ const run = async () => {
     'лише оплачені',
     query('waiter-totals', { payment_status: 'Оплачено' }),
   );
-  check('виручка оплачених збігається', cents(q7paid.summary.revenue) === ordersTotal(paid));
+  check('виручка оплачених збігається', cents(q7paid.summary.revenue) === ordersDue(paid));
   check('є два тексти SQL', hasSql(q7) && q7.sql.length === 2);
 
   console.log('Q8. Вільні столики (NOT EXISTS + місткість)');

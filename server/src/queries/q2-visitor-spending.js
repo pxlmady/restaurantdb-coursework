@@ -2,6 +2,8 @@
 // Прототип: ЛР2 №4 (скільки сплатила кожна компанія: JOIN + SUM + GROUP BY).
 // Відвідувач пов'язаний із замовленням лише через бронювання, тому замовлення без бронювання
 // (гості без запису) тут не враховуються. Період — за датою бронювання.
+// Етап 9: суми рахуються з урахуванням знижки замовлення ([Order].discount_percent), тобто
+// «витрачено» = сума до сплати (без чайових).
 // Реалізація: параметризований SQL через Prisma $queryRaw (CTE, GROUP BY, HAVING).
 import { prisma } from '../lib/prisma.js';
 import { runSql } from '../lib/named-sql.js';
@@ -15,9 +17,11 @@ const schema = {
   min_total: moneyRule({ required: false }),
 };
 
-// Спершу сума кожного замовлення (CTE), потім групування замовлень за відвідувачем
+// Спершу сума до сплати кожного замовлення (CTE), потім групування замовлень за відвідувачем
 const SQL = `WITH order_totals AS (
-    SELECT o.id_order, r.id_visitor, SUM(od.quantity * d.price) AS order_total
+    SELECT o.id_order, r.id_visitor,
+           SUM(od.quantity * d.price)
+             - ROUND(SUM(od.quantity * d.price) * o.discount_percent / 100, 2) AS order_total
     FROM [Order] AS o
     JOIN Reservation AS r  ON r.id_reservation = o.id_reservation
     JOIN OrderDetail AS od ON od.id_order = o.id_order
@@ -25,7 +29,7 @@ const SQL = `WITH order_totals AS (
     WHERE (@payment_status IS NULL OR o.payment_status = @payment_status)
       AND (@from IS NULL OR r.date_time >= @from)
       AND (@to_next_day IS NULL OR r.date_time < @to_next_day)
-    GROUP BY o.id_order, r.id_visitor
+    GROUP BY o.id_order, r.id_visitor, o.discount_percent
 )
 SELECT v.id_visitor, v.full_name, v.phone_number,
        COUNT(*)              AS orders_count,

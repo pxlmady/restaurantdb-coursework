@@ -26,7 +26,9 @@ const orders = {
       `Замовлення №${row.id_order} буде видалено разом з усіма позиціями (${row.items_count}): ` +
       'зв’язок OrderDetail → [Order] має ON DELETE CASCADE.',
     saved: (row, edited) =>
-      `Замовлення №${row.id_order} ${edited ? 'змінено' : 'створено'}, сума ${formatMoney(row.total)}`,
+      `Замовлення №${row.id_order} ${edited ? 'змінено' : 'створено'}, до сплати ` +
+      `${formatMoney(row.total_due)}` +
+      (row.discount_percent > 0 ? ` (знижка ${row.discount_percent} %)` : ''),
     deleted: (row) => `Замовлення №${row.id_order} видалено`,
   },
   columns: [
@@ -57,13 +59,31 @@ const orders = {
       render: (row) => row.waiter.full_name,
     },
     { field: 'items_count', label: 'Позицій', align: 'right' },
+    // Етап 9: відсоток знижки зберігається в [Order].discount_percent; зі знижкою під сумою
+    // до сплати показано суму за меню й відсоток
     {
-      field: 'total',
-      label: 'Сума',
+      field: 'total_due',
+      label: 'До сплати',
       align: 'right',
-      render: (row) => formatMoney(row.total),
       nowrap: true,
-      sortValue: (row) => Number(row.total),
+      sortValue: (row) => Number(row.total_due),
+      render: (row) =>
+        row.discount_percent > 0 ? (
+          <>
+            <b>{formatMoney(row.total_due)}</b>
+            <Typography component="div" variant="body2" color="text.secondary">
+              <s>{formatMoney(row.total)}</s>{' '}
+              <Chip
+                size="small"
+                color="secondary"
+                variant="outlined"
+                label={`−${row.discount_percent} %`}
+              />
+            </Typography>
+          </>
+        ) : (
+          formatMoney(row.total_due)
+        ),
     },
     {
       field: 'tips',
@@ -114,11 +134,23 @@ function OrderDetails({ order }) {
           </TableRow>
         ))}
         <TableRow>
+          <TableCell colSpan={3}>Разом (за поточними цінами меню)</TableCell>
+          <TableCell align="right">{formatMoney(order.total)}</TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell colSpan={3}>
+            Знижка{order.discount_percent > 0 ? ` ${order.discount_percent} %` : ''}
+          </TableCell>
+          <TableCell align="right">
+            {order.discount_percent > 0 ? `−${formatMoney(order.discount_amount)}` : '—'}
+          </TableCell>
+        </TableRow>
+        <TableRow>
           <TableCell colSpan={3} sx={{ fontWeight: 600 }}>
-            Разом (за поточними цінами меню)
+            До сплати (без чайових)
           </TableCell>
           <TableCell align="right" sx={{ fontWeight: 600 }}>
-            {formatMoney(order.total)}
+            {formatMoney(order.total_due)}
           </TableCell>
         </TableRow>
       </TableBody>
@@ -149,7 +181,7 @@ export default function OrdersPage() {
       )}
       <CrudPage
         title="Замовлення"
-        description="Замовлення з позиціями. Сума не зберігається в базі, а рахується за поточними цінами страв. Розгорніть рядок, щоб побачити позиції."
+        description="Замовлення з позиціями. Сума не зберігається в базі, а рахується за поточними цінами страв; у базі зберігається лише відсоток знижки (5 % постійному відвідувачу від 3 оплачених замовлень, 10 % за суму від 2000 грн, береться більша). Розгорніть рядок, щоб побачити позиції."
         entity={orders}
         filterRows={status ? (row) => row.payment_status === status : null}
         toolbar={

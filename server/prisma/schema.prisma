@@ -23,19 +23,21 @@ model Dish {
 }
 
 model Order {
-  id_order       Int           @id(map: "PK_Order") @default(autoincrement())
+  id_order         Int           @id(map: "PK_Order") @default(autoincrement())
   /// Унікальність: фільтрований індекс UX_Order_Reservation (WHERE id_reservation IS NOT NULL)
-  id_reservation Int?          @unique(map: "UX_Order_Reservation")
-  id_waiter      Int
+  id_reservation   Int?          @unique(map: "UX_Order_Reservation")
+  id_waiter        Int
   /// CHECK CHK_Order_Status: 'Оплачено', 'В очікуванні', 'Скасовано'
-  payment_status String        @db.NVarChar(20)
-  table_number   Int
+  payment_status   String        @db.NVarChar(20)
+  table_number     Int
   /// CHECK CHK_Order_Tips: tips >= 0
-  tips           Decimal       @default(0, map: "DF_Order_Tips") @db.Decimal(10, 2)
-  reservation    Reservation?  @relation(fields: [id_reservation], references: [id_reservation], onDelete: NoAction, onUpdate: NoAction, map: "FK_Order_Reservation")
-  table          Table         @relation(fields: [table_number], references: [table_number], onUpdate: NoAction, map: "FK_Order_Table")
-  waiter         Waiter        @relation(fields: [id_waiter], references: [id_waiter], onUpdate: NoAction, map: "FK_Order_Waiter")
-  order_details  OrderDetail[]
+  tips             Decimal       @default(0, map: "DF_Order_Tips") @db.Decimal(10, 2)
+  /// Відсоток знижки (етап 9), визначає сервер. CHECK CHK_Order_Discount: 0..100
+  discount_percent Decimal       @default(0, map: "DF_Order_Discount") @db.Decimal(5, 2)
+  reservation      Reservation?  @relation(fields: [id_reservation], references: [id_reservation], onDelete: NoAction, onUpdate: NoAction, map: "FK_Order_Reservation")
+  table            Table         @relation(fields: [table_number], references: [table_number], onUpdate: NoAction, map: "FK_Order_Table")
+  waiter           Waiter        @relation(fields: [id_waiter], references: [id_waiter], onUpdate: NoAction, map: "FK_Order_Waiter")
+  order_details    OrderDetail[]
 }
 
 model OrderDetail {

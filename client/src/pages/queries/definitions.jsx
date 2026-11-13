@@ -95,7 +95,8 @@ export const q2 = {
   title: 'Витрати відвідувачів',
   description:
     'Скільки замовлень зробив кожен відвідувач і скільки витратив: сума, середній і найбільший ' +
-    'чек. Враховуються замовлення за бронюваннями; період — за датою бронювання.',
+    'чек. Враховуються замовлення за бронюваннями; період — за датою бронювання. Суми — до ' +
+    'сплати, тобто з урахуванням знижки замовлення (без чайових).',
   prototype: 'ЛР2 №4 (скільки сплатила кожна компанія)',
   technique: '$queryRaw: CTE, SUM, COUNT, AVG, MAX, GROUP BY, HAVING',
   endpoint: 'visitor-spending',
@@ -195,7 +196,8 @@ export const q5 = {
   title: 'Статистика страв',
   description:
     'Для кожної страви меню: у скількох замовленнях була, скільки порцій продано, найбільша ' +
-    'кількість в одному замовленні, виручка, її частка та місце в рейтингу.',
+    'кількість в одному замовленні, виручка, її частка та місце в рейтингу. Виручка страви — ' +
+    'за цінами меню, без знижок замовлень (знижка діє на замовлення, а не на страву).',
   prototype: 'ЛР2 №3 (MAX знижки на товар, MAX() OVER)',
   technique: '$queryRaw: GROUP BY, SUM/MAX, SUM() OVER (), RANK() OVER',
   endpoint: 'dish-stats',
@@ -294,8 +296,9 @@ export const q7 = {
   code: 'Q7',
   title: 'Підсумки по офіціантах',
   description:
-    'Кількість замовлень, виручка, середній чек і чайові кожного офіціанта. Офіціанти без ' +
-    'замовлень показуються з нулями. Чайові рахує агрегація Prisma, виручку — SQL.',
+    'Кількість замовлень, виручка після знижок, надані знижки, середній чек і чайові кожного ' +
+    'офіціанта. Офіціанти без замовлень показуються з нулями. Чайові рахує агрегація Prisma, ' +
+    'виручку й знижки — SQL.',
   prototype: 'немає (власна пропозиція)',
   technique: 'Prisma groupBy (_count, _sum, _avg) + $queryRaw',
   endpoint: 'waiter-totals',
@@ -306,6 +309,7 @@ export const q7 = {
     { field: 'full_name', label: 'Офіціант' },
     number('orders_count', 'Замовлень'),
     money('revenue', 'Виручка'),
+    money('discounts', 'Знижки'),
     money('avg_check', 'Середній чек'),
     money('tips_total', 'Чайові разом'),
     money('avg_tips', 'Середні чайові'),
@@ -314,6 +318,7 @@ export const q7 = {
     { label: 'Офіціантів', value: s.waiters_count },
     { label: 'Замовлень', value: s.orders_count },
     { label: 'Виручка', value: formatMoney(s.revenue) },
+    { label: 'Знижки', value: formatMoney(s.discounts) },
     { label: 'Чайові', value: formatMoney(s.tips_total) },
     { label: 'Середні чайові', value: formatMoney(s.avg_tips) },
   ],

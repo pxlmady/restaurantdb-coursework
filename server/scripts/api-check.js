@@ -1,4 +1,4 @@
-// Перевірка CRUD API через HTTP (етап 6). Потрібен запущений сервер: npm run dev:server.
+// Перевірка CRUD API через HTTP (етап 6, знижки — етап 9). Потрібен запущений сервер: npm run dev:server.
 // Сценарій створює власні тестові записи (телефон +38099..., назви з позначкою «API-тест»),
 // перевіряє правила й помилки, а наприкінці видаляє все, що створив.
 // Наявні записи бази лише читаються. Запуск: npm run api:check
@@ -360,6 +360,128 @@ const run = async () => {
   );
   const list = await expect('список позицій', 'GET', detailsPath, null, 200);
   check('2 позиції', list.length === 2);
+
+  // Етап 9. Тестова страва коштує 100.00 грн, у тестового відвідувача спершу 1 оплачене
+  // замовлення (вище). Правила: від 3 оплачених — 5 %, сума від 2000 грн — 10 %, більша з двох.
+  console.log('Знижки');
+  check('2 правила знижок у довіднику', dict.discount_rules?.length === 2);
+  const preview = (body) =>
+    expect('попередній розрахунок', 'POST', '/orders/discount-preview', body, 200);
+  const p1 = await preview({ details: [{ id_dish: dish.id_dish, quantity: 20 }, { id_dish: '' }] });
+  check(
+    'сума 2000.00 без бронювання → 10 %, до сплати 1800.00',
+    p1.discount_percent === 10 && p1.applied === 'big_order' && p1.total_due === '1800.00',
+    JSON.stringify(p1),
+  );
+  const p2 = await preview({
+    id_reservation: later.id_reservation,
+    details: [{ id_dish: dish.id_dish, quantity: 19 }],
+  });
+  check(
+    '1900.00 і 1 оплачене замовлення → 0 %',
+    p2.discount_percent === 0 && p2.rules.every((r) => !r.met),
+    JSON.stringify(p2),
+  );
+  const orderBody = (details, payment_status = 'В очікуванні') => ({
+    id_waiter: waiter.id_waiter,
+    table_number: tableNumber,
+    payment_status,
+    details: details.map((quantity) => ({ id_dish: dish.id_dish, quantity })),
+  });
+  const big = await expect('замовлення на 2000.00', 'POST', '/orders', orderBody([20]), 201);
+  created.push(`/orders/${big.id_order}`);
+  check(
+    'знижка 10 %: 200.00, до сплати 1800.00',
+    big.discount_percent === 10 && big.discount_amount === '200.00' && big.total_due === '1800.00',
+    JSON.stringify(big),
+  );
+  const bigPath = `/orders/${big.id_order}`;
+  const b2 = await expect('менше позицій (очікує оплати)', 'PUT', bigPath, orderBody([5]), 200);
+  check('знижку перераховано → 0 %', b2.discount_percent === 0 && b2.total_due === '500.00');
+  await expect(
+    'позиція до 25 порцій',
+    'PUT',
+    `${bigPath}/details/${dish.id_dish}`,
+    { quantity: 25 },
+    200,
+  );
+  const b3 = (await call('GET', bigPath)).body;
+  check(
+    'після зміни позиції знижка 10 %',
+    b3.discount_percent === 10 && b3.total_due === '2250.00',
+  );
+  const b4 = await expect('оплата', 'PUT', bigPath, orderBody([25], 'Оплачено'), 200);
+  check('оплачене зберігає 10 %', b4.discount_percent === 10);
+  const b5 = await expect('зміна оплаченого', 'PUT', bigPath, orderBody([1], 'Оплачено'), 200);
+  check(
+    'знижка оплаченого зафіксована: 10 % від 100.00',
+    b5.discount_percent === 10 && b5.discount_amount === '10.00' && b5.total_due === '90.00',
+    JSON.stringify(b5),
+  );
+  const p3 = await preview({ id_order: big.id_order, payment_status: 'Оплачено', details: [] });
+  check(
+    'розрахунок для оплаченого: frozen, 10 %',
+    p3.frozen === true && p3.discount_percent === 10,
+  );
+
+  // Постійний відвідувач: ще 2 оплачені замовлення → 3, тоді наступне отримує 5 %
+  const paidOrder = await expect(
+    'оплачене замовлення №2 відвідувача',
+    'POST',
+    '/orders',
+    { ...orderBody([1], 'Оплачено'), id_reservation: later.id_reservation },
+    201,
+  );
+  created.push(`/orders/${paidOrder.id_order}`);
+  check('1 попереднє оплачене → 0 %', paidOrder.discount_percent === 0);
+  const res3 = await expect(
+    'бронювання №3',
+    'POST',
+    '/reservations',
+    { ...resBody, date_time: '2027-01-02T19:00' },
+    201,
+  );
+  created.push(`/reservations/${res3.id_reservation}`);
+  const res4 = await expect(
+    'бронювання №4',
+    'POST',
+    '/reservations',
+    { ...resBody, date_time: '2027-01-04T19:00' },
+    201,
+  );
+  created.push(`/reservations/${res4.id_reservation}`);
+  const o3 = await expect(
+    'оплачене замовлення №3 відвідувача',
+    'POST',
+    '/orders',
+    { ...orderBody([1], 'Оплачено'), id_reservation: res3.id_reservation },
+    201,
+  );
+  created.push(`/orders/${o3.id_order}`);
+  check('2 попередні оплачені → 0 %', o3.discount_percent === 0);
+  const regular = await expect(
+    'замовлення постійного відвідувача',
+    'POST',
+    '/orders',
+    { ...orderBody([2]), id_reservation: res4.id_reservation },
+    201,
+  );
+  created.push(`/orders/${regular.id_order}`);
+  check(
+    '3 оплачені → 5 %: 10.00, до сплати 190.00',
+    regular.discount_percent === 5 &&
+      regular.discount_amount === '10.00' &&
+      regular.total_due === '190.00',
+    JSON.stringify(regular),
+  );
+  const both = await expect(
+    'постійний відвідувач і сума 2000.00',
+    'PUT',
+    `/orders/${regular.id_order}`,
+    { ...orderBody([20]), id_reservation: res4.id_reservation },
+    200,
+  );
+  check('знижки не сумуються: 10 %', both.discount_percent === 10 && both.total_due === '1800.00');
 
   console.log('Заборонені видалення (є пов’язані записи)');
   await expect('відвідувач з бронюванням', 'DELETE', `/visitors/${visitor.id_visitor}`, null, 409);

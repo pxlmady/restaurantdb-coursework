@@ -1,10 +1,18 @@
 // CRUD замовлень (таблиця [Order]) і їхніх позицій (таблиця OrderDetail).
 // Замовлення разом з позиціями створюється і змінюється в одній транзакції Prisma:
 // якщо будь-яка перевірка чи вставка не вдалася, у базі не залишається нічого.
+// Етап 9: у тій самій транзакції сервер визначає знижку (domain/discounts.js) і записує
+// її відсоток у [Order].discount_percent. Клієнт відсоток не передає.
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { PAYMENT_STATUSES } from '../domain/dictionaries.js';
+import {
+  applyDiscount,
+  detailsTotal,
+  evaluateDiscount,
+  isDiscountFrozen,
+  refreshOrderDiscount,
+} from '../domain/discounts.js';
 import { formatDateTime, formatMoney } from '../lib/format.js';
 import { conflict, HttpError, invalidField, notFound } from '../lib/http-error.js';
 import { integer, money, oneOf, parseId, validate } from '../lib/validation.js';
@@ -38,15 +46,15 @@ const detailToJson = ({ dish, ...detail }) => ({
   line_total: formatMoney(dish.price.mul(detail.quantity)),
 });
 
-// Сума замовлення не зберігається в базі: рахуємо за поточними цінами страв
-const toJson = ({ waiter, reservation, order_details, tips, ...order }) => {
-  const total = order_details.reduce(
-    (sum, detail) => sum.add(detail.dish.price.mul(detail.quantity)),
-    new Prisma.Decimal(0),
-  );
+// Сума замовлення не зберігається в базі: рахуємо за поточними цінами страв.
+// Знижка: відсоток з бази, сума знижки й сума до сплати рахуються від суми позицій.
+const toJson = ({ waiter, reservation, order_details, tips, discount_percent, ...order }) => {
+  const total = detailsTotal(order_details);
+  const { discount_amount, total_due } = applyDiscount(total, discount_percent);
   return {
     ...order,
     tips: formatMoney(tips),
+    discount_percent: Number(discount_percent),
     waiter: { full_name: waiter.full_name },
     reservation: reservation && {
       date_time: formatDateTime(reservation.date_time),
@@ -57,6 +65,8 @@ const toJson = ({ waiter, reservation, order_details, tips, ...order }) => {
     details: order_details.map(detailToJson),
     items_count: order_details.length,
     total: formatMoney(total),
+    discount_amount: formatMoney(discount_amount),
+    total_due: formatMoney(total_due),
   };
 };
 
@@ -136,6 +146,62 @@ const findOr404 = async (client, id) => {
   return order;
 };
 
+// ----- Попередній розрахунок знижки (для форми замовлення, у базі нічого не змінює) -----
+
+// Тіло: { id_order?, id_reservation?, payment_status?, details: [{ id_dish, quantity }] }.
+// Неповні позиції форми (без страви або з неправильною кількістю) пропускаються.
+const previewSchema = {
+  id_order: integer({ required: false, min: 1, max: MAX_INT }),
+  id_reservation: integer({ required: false, min: 1, max: MAX_INT }),
+  payment_status: oneOf({ values: PAYMENT_STATUSES, required: false }),
+};
+
+ordersRouter.post('/discount-preview', async (req, res) => {
+  const data = validate(req.body, previewSchema);
+  const lines = (Array.isArray(req.body.details) ? req.body.details : []).flatMap((item) => {
+    try {
+      return [validate(item, detailSchema)];
+    } catch (err) {
+      if (err instanceof HttpError) return [];
+      throw err;
+    }
+  });
+  const dishes = await prisma.dish.findMany({
+    where: { id_dish: { in: lines.map((l) => l.id_dish) } },
+  });
+  const priceOf = new Map(dishes.map((d) => [d.id_dish, d]));
+  const total = detailsTotal(
+    lines
+      .filter((l) => priceOf.has(l.id_dish))
+      .map((l) => ({ ...l, dish: priceOf.get(l.id_dish) })),
+  );
+
+  const stored = data.id_order
+    ? await prisma.order.findUnique({ where: { id_order: data.id_order } })
+    : null;
+  const evaluation = await evaluateDiscount(prisma, {
+    id_order: stored?.id_order ?? null,
+    id_reservation: data.id_reservation,
+    total,
+  });
+  // Закрите замовлення, яке лишається закритим, зберігає свою знижку
+  const frozen = Boolean(
+    stored && isDiscountFrozen(stored.payment_status, data.payment_status ?? stored.payment_status),
+  );
+  const percent = frozen ? Number(stored.discount_percent) : evaluation.percent;
+  const { discount_amount, total_due } = applyDiscount(total, percent);
+
+  res.json({
+    discount_percent: percent,
+    applied: frozen ? null : evaluation.applied,
+    frozen,
+    rules: evaluation.rules,
+    total: formatMoney(total),
+    discount_amount: formatMoney(discount_amount),
+    total_due: formatMoney(total_due),
+  });
+});
+
 // ----- Замовлення -----
 
 ordersRouter.get('/', async (_req, res) => {
@@ -163,6 +229,8 @@ ordersRouter.post('/', async (req, res) => {
         data: details.map((d) => ({ ...d, id_order: created.id_order })),
       });
     }
+    // Знижка нового замовлення визначається завжди, незалежно від статусу
+    await refreshOrderDiscount(tx, created.id_order, { force: true });
     return findOr404(tx, created.id_order);
   });
 
@@ -176,7 +244,7 @@ ordersRouter.put('/:id', async (req, res) => {
   const details = req.body.details === undefined ? null : validateDetails(req.body.details);
 
   const order = await prisma.$transaction(async (tx) => {
-    await findOr404(tx, id);
+    const stored = await findOr404(tx, id);
     const orderData = await resolveOrder(tx, data, id);
     await tx.order.update({ where: { id_order: id }, data: orderData });
     if (details) {
@@ -185,6 +253,10 @@ ordersRouter.put('/:id', async (req, res) => {
       if (details.length > 0) {
         await tx.orderDetail.createMany({ data: details.map((d) => ({ ...d, id_order: id })) });
       }
+    }
+    // Закрите замовлення, яке лишається закритим, зберігає зафіксовану знижку
+    if (!isDiscountFrozen(stored.payment_status, data.payment_status)) {
+      await refreshOrderDiscount(tx, id, { force: true });
     }
     return findOr404(tx, id);
   });
@@ -229,10 +301,15 @@ ordersRouter.post('/:id/details', async (req, res) => {
   await findOr404(prisma, id_order);
   const dish = await prisma.dish.findUnique({ where: { id_dish: data.id_dish } });
   if (!dish) throw invalidField('id_dish', `Страву №${data.id_dish} не знайдено`);
-  // Повторне додавання тієї самої страви відхиляє первинний ключ PK_OrderDetail (409)
-  const detail = await prisma.orderDetail.create({
-    data: { ...data, id_order },
-    include: { dish: true },
+  // Повторне додавання тієї самої страви відхиляє первинний ключ PK_OrderDetail (409).
+  // Знижку замовлення «В очікуванні» перераховуємо в тій самій транзакції.
+  const detail = await prisma.$transaction(async (tx) => {
+    const created = await tx.orderDetail.create({
+      data: { ...data, id_order },
+      include: { dish: true },
+    });
+    await refreshOrderDiscount(tx, id_order);
+    return created;
   });
   res.status(201).json(detailToJson(detail));
 });
@@ -242,13 +319,20 @@ ordersRouter.put('/:id/details/:dishId', async (req, res) => {
   const key = detailKey(req);
   const data = validate(req.body, { quantity });
   await findDetailOr404(key);
-  const detail = await prisma.orderDetail.update({ where: key, data, include: { dish: true } });
+  const detail = await prisma.$transaction(async (tx) => {
+    const updated = await tx.orderDetail.update({ where: key, data, include: { dish: true } });
+    await refreshOrderDiscount(tx, updated.id_order);
+    return updated;
+  });
   res.json(detailToJson(detail));
 });
 
 ordersRouter.delete('/:id/details/:dishId', async (req, res) => {
   const key = detailKey(req);
   await findDetailOr404(key);
-  await prisma.orderDetail.delete({ where: key });
+  await prisma.$transaction(async (tx) => {
+    await tx.orderDetail.delete({ where: key });
+    await refreshOrderDiscount(tx, key.id_order_id_dish.id_order);
+  });
   res.status(204).end();
 });
