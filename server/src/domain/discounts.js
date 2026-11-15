@@ -68,17 +68,28 @@ const ordersWord = (n) => {
 /**
  * Обчислює знижку за правилами. Працює і в транзакції (tx), і з prisma.
  * @param client  prisma або tx
- * @param input   { id_order?: number|null, id_reservation?: number|null, total: Decimal }
+ * @param input   { id_order?: number|null, id_reservation?: number|null,
+ *                  id_visitor?: number|null, total: Decimal }
+ *                id_visitor — для сайту ресторану (етап 10): бронювання ще не створене,
+ *                але відвідувача вже знайдено за телефоном
  * @returns { percent, applied, rules: [{ code, title, percent, met, text }], visitor }
  */
-export async function evaluateDiscount(client, { id_order = null, id_reservation = null, total }) {
+export async function evaluateDiscount(
+  client,
+  { id_order = null, id_reservation = null, id_visitor = null, total },
+) {
   const regular = rule('regular');
   const big = rule('big_order');
 
   // 1) Постійний відвідувач: лише якщо є бронювання (через нього знаємо відвідувача)
   let visitor = null;
   let paidOrders = 0;
-  if (id_reservation) {
+  if (id_visitor) {
+    visitor = await client.visitor.findUnique({
+      where: { id_visitor },
+      select: { id_visitor: true, full_name: true },
+    });
+  } else if (id_reservation) {
     const reservation = await client.reservation.findUnique({
       where: { id_reservation },
       select: { visitor: { select: { id_visitor: true, full_name: true } } },

@@ -5,6 +5,7 @@ import PeopleIcon from '@mui/icons-material/PeopleOutlined';
 import ReceiptIcon from '@mui/icons-material/ReceiptLongOutlined';
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import BadgeIcon from '@mui/icons-material/BadgeOutlined';
+import StorefrontIcon from '@mui/icons-material/StorefrontOutlined';
 import { Typography } from '@mui/material';
 import { QUERY_DEFINITIONS } from './pages/queries/definitions.jsx';
 
@@ -12,7 +13,11 @@ import { QUERY_DEFINITIONS } from './pages/queries/definitions.jsx';
 // замість іконки в ній показано номер запиту.
 export const NAVIGATION = [
   {
-    items: [{ path: '/', label: 'Головна', icon: <DashboardIcon /> }],
+    items: [
+      { path: '/', label: 'Головна', icon: <DashboardIcon /> },
+      // Сайт для відвідувачів (етап 10) має власний каркас; на головній картки для нього немає
+      { path: '/site', label: 'Сайт ресторану', icon: <StorefrontIcon />, external: true },
+    ],
   },
   {
     title: 'Довідники',

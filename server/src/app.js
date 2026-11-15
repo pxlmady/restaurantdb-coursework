@@ -9,6 +9,7 @@ import { dishesRouter } from './routes/dishes.js';
 import { reservationsRouter } from './routes/reservations.js';
 import { ordersRouter } from './routes/orders.js';
 import { queriesRouter } from './routes/queries.js';
+import { siteRouter } from './routes/site.js';
 
 export const app = express();
 
@@ -27,6 +28,9 @@ app.use('/api/orders', ordersRouter); // разом з позиціями: /api/
 
 // Запити Q1–Q8: фільтрація, групування, агрегація, пошук (етап 8)
 app.use('/api/queries', queriesRouter);
+
+// Сайт ресторану для відвідувачів: меню, підбір столика, бронювання з передзамовленням (етап 10)
+app.use('/api/site', siteRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

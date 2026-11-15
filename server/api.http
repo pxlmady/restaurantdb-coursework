@@ -106,3 +106,36 @@ GET {{api}}/queries/waiter-totals
 
 ###
 GET {{api}}/queries/free-tables?date_time=2026-11-08T19:00&people_count=4
+
+### Сайт ресторану (етап 10)
+GET {{api}}/site/info
+
+###
+GET {{api}}/site/menu
+
+###
+GET {{api}}/site/availability?date_time=2026-12-20T19:00&people_count=2
+
+###
+POST {{api}}/site/preview
+Content-Type: application/json
+
+{
+  "phone_number": "+380930000101",
+  "details": [{ "id_dish": 11, "quantity": 2 }]
+}
+
+### Бронювання з передзамовленням (створює записи в базі)
+POST {{api}}/site/bookings
+Content-Type: application/json
+
+{
+  "full_name": "Тест Сайту",
+  "phone_number": "+380 (97) 000-00-01",
+  "date_time": "2026-12-20T19:00",
+  "people_count": 2,
+  "details": [{ "id_dish": 1, "quantity": 2 }]
+}
+
+###
+GET {{api}}/site/bookings?phone_number=%2B380970000001

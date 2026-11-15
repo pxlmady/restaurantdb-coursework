@@ -29,6 +29,9 @@ WHERE t.capacity >= @people_count
   )
 ORDER BY t.capacity, t.table_number;`;
 
+// Той самий запит використовує сайт ресторану (етап 10), щоб підібрати столик для бронювання
+export const FREE_TABLES_SQL = SQL;
+
 // Зайняті в цей час столики (щоб показати, чому столик не потрапив у результат)
 const SQL_BUSY = `SELECT r.table_number, r.id_reservation, r.date_time, r.people_count
 FROM Reservation AS r

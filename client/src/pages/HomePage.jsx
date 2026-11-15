@@ -67,7 +67,7 @@ export default function HomePage() {
 
   const sections = NAVIGATION.filter((group) => !group.queries)
     .flatMap((group) => group.items)
-    .filter((item) => item.path !== '/');
+    .filter((item) => item.path !== '/' && !item.external);
   const queries = NAVIGATION.find((group) => group.queries)?.items ?? [];
 
   return (

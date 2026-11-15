@@ -12,6 +12,7 @@
     "db:pull": "npm --prefix server run db:pull",
     "api:check": "npm --prefix server run api:check",
     "queries:check": "npm --prefix server run queries:check",
+    "site:check": "npm --prefix server run site:check",
     "lint": "npm --prefix server run lint && npm --prefix client run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

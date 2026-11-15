@@ -10,12 +10,25 @@ import OrdersPage from './pages/OrdersPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import QueryRoute from './pages/queries/QueryRoute.jsx';
 import { QUERY_DEFINITIONS } from './pages/queries/definitions.jsx';
+import SiteLayout from './site/SiteLayout.jsx';
+import SiteHomePage from './site/pages/SiteHomePage.jsx';
+import SiteMenuPage from './site/pages/SiteMenuPage.jsx';
+import SiteBookingPage from './site/pages/SiteBookingPage.jsx';
+import SiteMyBookingsPage from './site/pages/SiteMyBookingsPage.jsx';
 
 // Маршрути клієнта: кожен розділ меню має власну адресу (/visitors, /orders тощо);
-// запити Q1–Q8 — /queries/<endpoint>, як і на сервері (/api/queries/<endpoint>)
+// запити Q1–Q8 — /queries/<endpoint>, як і на сервері (/api/queries/<endpoint>).
+// Сайт ресторану для відвідувачів (етап 10) — /site/..., з власним каркасом і темою.
 export default function App() {
   return (
     <Routes>
+      <Route path="site" element={<SiteLayout />}>
+        <Route index element={<SiteHomePage />} />
+        <Route path="menu" element={<SiteMenuPage />} />
+        <Route path="booking" element={<SiteBookingPage />} />
+        <Route path="my" element={<SiteMyBookingsPage />} />
+        <Route path="*" element={<SiteHomePage />} />
+      </Route>
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="visitors" element={<VisitorsPage />} />
